@@ -8,23 +8,26 @@ from urllib import urlopen, urlretrieve
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup
 from Queue import Queue, Empty
 from threading import Thread, active_count, current_thread
-
+from thread import interrupt_main
 
 fetch_queue = Queue()
 
 def fetch_worker():
-	while True:
-		try:
-			url, filename = fetch_queue.get_nowait()
-		except Empty:
-			return
-		try:
-			urlretrieve(url, filename=filename)
-			#print 'got', filename, current_thread().ident
-		except:
-			print 'Download of', url, 'failed'
-		finally:
-			fetch_queue.task_done()
+	try:
+		while True:
+			try:
+				url, filename = fetch_queue.get_nowait()
+			except Empty:
+				return
+			try:
+				urlretrieve(url, filename=filename)
+				#print 'got', filename, current_thread().ident
+			except:
+				print 'Download of', url, 'failed'
+			finally:
+				fetch_queue.task_done()
+	except KeyboardInterrupt:
+		interrupt_main()
 
 
 def fetch(urls, pool_size=4, **kwargs):
@@ -36,9 +39,8 @@ def fetch(urls, pool_size=4, **kwargs):
 	old_pool_size = active_count()
 	for i in range(pool_size - old_pool_size):
 		thread = Thread(target=fetch_worker)
+		thread.daemon = True
 		thread.start()
-
-	fetch_queue.join()
 
 
 
@@ -210,3 +212,11 @@ if __name__ == '__main__':
 		for line in sys.stdin:
 			fetch_all(line.split(), **kwargs)
 
+	import time, sys
+	try:
+		while not fetch_queue.empty():
+			sys.stdout.write('\r%d to go     ' % fetch_queue.qsize())
+			sys.stdout.flush()
+			time.sleep(1)
+	except KeyboardInterrupt:
+		parser.exit()
