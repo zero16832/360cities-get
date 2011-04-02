@@ -50,8 +50,12 @@ def try_makedirs(path):
 def get_info(url):
 	''' returns the metadata url for this panorama '''
 
+	
 	try:
-		page = BeautifulSoup(''.join(urlopen(url)))
+		source = list(urlopen(url))
+		page = BeautifulSoup(''.join(source))
+		if page.find('krpano'):
+			return source
 		link = page.find('link', {'rel':'video_src'})
 		query = urlparse(link['href']).query
 		params = dict([p.split('=') for p in query.split('&')])
@@ -79,15 +83,21 @@ def tiles(url, target=None):
 	info_file = join(target, 'info.xml')
 	if not exists(info_file):
 		print 'Retrieving info...'
-		info_url = urljoin(url, get_info(url))
-		if not info_url:
+		info = get_info(url)
+		if not info:
 			raise NotFound()
-		msg = urlopen(info_url)
-		if msg.getcode() not in [200]:
-			raise NotFound()
+		elif type(info) == unicode:
+			info_url = urljoin(url, info)
+			if not info_url:
+				raise NotFound()
+			msg = urlopen(info_url)
+			if msg.getcode() not in [200]:
+				raise NotFound()
+		else:
+			msg = info
 		with open(info_file, 'w') as f:
 			for line in msg:
-				print >>f, line
+				print >>f, line,
 
 	info = BeautifulStoneSoup(''.join(open(info_file)))
 	pano = info.find('krpano')
