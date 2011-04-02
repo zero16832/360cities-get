@@ -27,7 +27,7 @@ def fetch_worker():
 			fetch_queue.task_done()
 
 
-def fetch(urls, pool_size=4):
+def fetch(urls, pool_size=4, **kwargs):
 	''' downloads the listed urls in parallel. '''
 
 	for data in urls:
@@ -67,7 +67,20 @@ class NotFound(Exception):
 	pass
 
 
-def tiles(url, target=None):
+def filter_levels(levels, size):
+	if not size:
+		for x in levels:
+			yield x
+	elif size == 'largest':
+		yield max(levels, key = lambda x: int(x['tiledimagewidth']))
+	else:
+		for x in levels:
+			w = int(x['tiledimagewidth'])
+			if w in size:
+				yield x
+
+
+def tiles(url, target=None, size=[], **kwargs):
 	''' yields pairs (url, filename) of tiles to download '''
 
 	# one dir per pano
@@ -114,7 +127,8 @@ def tiles(url, target=None):
 
 	# go through levels
 	count = 0
-	for level in image.findAll('level'):
+	for level in filter_levels(image.findAll('level'), size):
+		print repr(level)
 		width = int(level['tiledimagewidth'])
 		height = int(level['tiledimageheight'])
 		row_count = width / tilesize
@@ -149,25 +163,50 @@ def tiles(url, target=None):
 	print count, 'tiles to download'
 
 
-def fetch_all(urls):
+def fetch_all(urls, **kwargs):
 	for url in urls:
 		print 'Downloading', url
 		try:
-			fetch(tiles(url))
+			fetch(tiles(url, **kwargs))
 		except NotFound:
 			print 'No panorama'
 		except Exception, e:
-			print e
+			import traceback
+			traceback.print_exc()
 			print 'Error while trying to download', url
 
 
 if __name__ == '__main__':
-	import sys
-	if len(sys.argv) > 1:
+	import argparse
+	parser = argparse.ArgumentParser(
+		description='Download 360cities.net panorama tiles',
+		fromfile_prefix_chars='@')
+	parser.add_argument('-l', '--largest', default=False, action='store_true',
+		help='Download only the largest version')
+	parser.add_argument('-s', '--size', type=int, default=[], nargs='+', metavar='W',
+		help='Download a set of specific widths')
+	parser.add_argument('-t', '--threads', type=int, default=3,
+		help='Number of parallel worker threads')
+	parser.add_argument('url', default=[], nargs='*',
+		help='The URL of a panorama page or its XML description')
+	args = parser.parse_args()
+
+	kwargs = {}
+
+	if args.size and args.largest:
+		parser.error(message='Specify either --largest OR --size')
+	kwargs['size'] = 'largest' if args.largest else args.size
+
+	if args.threads < 0 or args.threads > 20:
+		parser.error()
+	kwargs['pool_size'] = args.threads
+
+	if args.url:
 		# urls on command line
-		fetch_all(sys.argv[1:])
+		fetch_all(args.url, **kwargs)
 	
 	else:
 		print 'Reading whitespace seperated URLs from stdin'
 		for line in sys.stdin:
-			fetch_all(line.split())
+			fetch_all(line.split(), **kwargs)
+
