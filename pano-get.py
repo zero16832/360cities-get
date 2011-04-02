@@ -105,8 +105,12 @@ def tiles(url, target=None):
 		remove(info_file)
 		raise NotFound()
 	image = info.find('krpano').find('image')
+	image_type = image['type'].strip().lower()
 	tilesize = int(image['tilesize'])
-	base_idx = int(image['baseindex'])
+	try:
+		base_idx = int(image['baseindex'])
+	except:
+		base_idx = 1
 
 	# go through levels
 	count = 0
@@ -120,15 +124,27 @@ def tiles(url, target=None):
 		try_makedirs(tile_path)
 
 		# find tiles
-		for side in ['left', 'right', 'front', 'back', 'up', 'down']:
-			pat = level.find(side)['url']
+		if image_type == 'sphere':
+			pat = level.find('sphere')['url']
 			for row in range(base_idx, row_count + base_idx):
 				for col in range(base_idx, col_count + base_idx):
-					tile_name = join(tile_path, '%s-%d-%d.jpg' % (side, row, col))
+					tile_name = join(tile_path, '%d-%d.jpg' % (row, col))
 					if not exists(tile_name):
-						tile_url = pat.replace('%r', str(row)).replace('%c', str(col))
+						tile_url = pat.replace('%0v', '%02d' % row).replace('%0h', '%02d' % col)
 						count += 1
 						yield tile_url, tile_name
+		elif image_type == 'cube':
+			for side in ['left', 'right', 'front', 'back', 'up', 'down']:
+				pat = level.find(side)['url']
+				for row in range(base_idx, row_count + base_idx):
+					for col in range(base_idx, col_count + base_idx):
+						tile_name = join(tile_path, '%s-%d-%d.jpg' % (side, row, col))
+						if not exists(tile_name):
+							tile_url = pat.replace('%r', str(row)).replace('%c', str(col))
+							count += 1
+							yield tile_url, tile_name
+		else:
+			raise Exception, 'Unsupported image type %r' % image_type
 
 	print count, 'tiles to download'
 
