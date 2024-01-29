@@ -3,14 +3,12 @@
 import os
 from os import makedirs, remove
 from os.path import basename, exists, join
-from urllib.parse import urlparse, urljoin
-from urllib.request import urlopen, urlretrieve
-from bs4 import BeautifulSoup, BeautifulStoneSoup
-from queue import Queue, Empty
+from urlparse import urlparse, urljoin
+from urllib import urlopen, urlretrieve
+from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup
+from Queue import Queue, Empty
 from threading import Thread, active_count, current_thread
-from _thread import interrupt_main
-import gzip
-import math
+from thread import interrupt_main
 
 fetch_queue = Queue()
 
@@ -25,7 +23,7 @@ def fetch_worker():
 				urlretrieve(url, filename=filename)
 				#print 'got', filename, current_thread().ident
 			except:
-				print('Download of', url, 'failed')
+				print 'Download of', url, 'failed'
 			finally:
 				fetch_queue.task_done()
 	except KeyboardInterrupt:
@@ -56,23 +54,15 @@ def get_info(url):
 
 	
 	try:
-		# print(urlopen(url).read())
-		source = list(gzip.decompress(urlopen(url).read()).decode("utf-8"))
-		# print(source)
-		page = BeautifulSoup(''.join(source), "html.parser")
-		# print(page)
+		source = list(urlopen(url))
+		page = BeautifulSoup(''.join(source))
 		if page.find('krpano'):
 			return source
 		link = page.find('link', {'rel':'video_src'})
-		print("link: ", link)
-		# query = urlparse(link['href']).query
-		query = urlparse("http://example.com/javascripts/krpano/krpano.swf?pano=http://www.360cities.net/embed_iframe/downtown-los-angeles-night-view.xml&state=facebook").query
-		print("query: ", query)
+		query = urlparse(link['href']).query
 		params = dict([p.split('=') for p in query.split('&')])
-		print("returning: ", params['pano'])
 		return params['pano']
-	except Exception as e:
-		print(e)
+	except:
 		return None
 
 class NotFound(Exception):
@@ -94,52 +84,35 @@ def filter_levels(levels, size):
 
 def tiles(url, target=None, size=[], **kwargs):
 	''' yields pairs (url, filename) of tiles to download '''
+
 	# one dir per pano
 	if not target:
-		# target = basename(urlparse(url).path)
-		target = "folder"
-		# target = ""
+		target = basename(urlparse(url).path)
 	try_makedirs(target)
 
 	# save original url
 	with open(join(target, 'original.url'), 'w') as f:
-		print(url, file=f)
+		print >>f, url
 
 	# get info
-	# info_file = join(target, 'info.xml')
-	info_file = "info.xml"
+	info_file = join(target, 'info.xml')
 	if not exists(info_file):
-		print("info file doesn't exist")
-		print('Retrieving info...')
+		print 'Retrieving info...'
 		info = get_info(url)
-		print("info returned")
 		if not info:
-			print('LINE 113 - NOT FOUND')
 			raise NotFound()
-		elif type(info) == str:
-			print("info is string")
+		elif type(info) == unicode:
 			info_url = urljoin(url, info)
-			print("info_url: ", info_url)
 			if not info_url:
-				print('LINE 119 - NOT FOUND')
 				raise NotFound()
 			msg = urlopen(info_url)
-			msgcont = msg.read().decode("utf-8")
-			# print("msg: ", msgcont)
-			print("code: ", msg.getcode())
 			if msg.getcode() not in [200]:
-				print('LINE 123 - NOT FOUND')
 				raise NotFound()
 		else:
-			print("info is not string")
 			msg = info
-		with open("info.xml", 'w') as f:
-			# print(target)
-			# print(join(target, 'info.xml'))	
-			print("writing to file")
-			for line in msgcont:
-				f.write(line)
-				
+		with open(info_file, 'w') as f:
+			for line in msg:
+				print >>f, line,
 
 	info = BeautifulStoneSoup(''.join(open(info_file)))
 	pano = info.find('krpano')
@@ -157,12 +130,9 @@ def tiles(url, target=None, size=[], **kwargs):
 	# go through levels
 	count = 0
 	for level in filter_levels(image.findAll('level'), size):
-		print(repr(level))
+		print repr(level)
 		width = int(level['tiledimagewidth'])
 		height = int(level['tiledimageheight'])
-		print("width: ", width)
-		print("height: ", height)
-		print("tilesize: ", tilesize)
 		row_count = width / tilesize
 		col_count = height / tilesize
 
@@ -182,32 +152,30 @@ def tiles(url, target=None, size=[], **kwargs):
 		elif image_type == 'cube':
 			for side in ['left', 'right', 'front', 'back', 'up', 'down']:
 				pat = level.find(side)['url']
-				print("base_idx: ", base_idx)
-				print("row_count: ", row_count)
-				for row in range(base_idx, math.ceil(row_count) + base_idx):
-					for col in range(base_idx, math.ceil(col_count) + base_idx):
+				for row in range(base_idx, row_count + base_idx):
+					for col in range(base_idx, col_count + base_idx):
 						tile_name = join(tile_path, '%s-%d-%d.jpg' % (side, row, col))
 						if not exists(tile_name):
 							tile_url = pat.replace('%r', str(row)).replace('%c', str(col))
 							count += 1
 							yield tile_url, tile_name
 		else:
-			raise Exception('Unsupported image type %r' % image_type)
+			raise Exception, 'Unsupported image type %r' % image_type
 
-	print(count, 'tiles to download')
+	print count, 'tiles to download'
 
 
 def fetch_all(urls, **kwargs):
 	for url in urls:
-		print('Downloading', url)
+		print 'Downloading', url
 		try:
 			fetch(tiles(url, **kwargs))
 		except NotFound:
-			print('No panorama')
-		except Exception as e:
+			print 'No panorama'
+		except Exception, e:
 			import traceback
 			traceback.print_exc()
-			print('Error while trying to download', url)
+			print 'Error while trying to download', url
 
 
 if __name__ == '__main__':
@@ -240,7 +208,7 @@ if __name__ == '__main__':
 		fetch_all(args.url, **kwargs)
 	
 	else:
-		print('Reading whitespace seperated URLs from stdin')
+		print 'Reading whitespace seperated URLs from stdin'
 		for line in sys.stdin:
 			fetch_all(line.split(), **kwargs)
 
