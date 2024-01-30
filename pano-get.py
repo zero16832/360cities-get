@@ -9,10 +9,14 @@ from bs4 import BeautifulSoup, BeautifulStoneSoup
 from queue import Queue, Empty
 from threading import Thread, active_count, current_thread
 from _thread import interrupt_main
-import gzip
+# import gzip
 import math
 
 fetch_queue = Queue()
+
+# remove info.xml if it exists
+if exists("info.xml"):
+	remove("info.xml")
 
 def fetch_worker():
 	try:
@@ -52,27 +56,14 @@ def try_makedirs(path):
 
 
 def get_info(url):
-	''' returns the metadata url for this panorama '''
-
-	
 	try:
-		# print(urlopen(url).read())
-		source = list(gzip.decompress(urlopen(url).read()).decode("utf-8"))
-		# print(source)
-		page = BeautifulSoup(''.join(source), "html.parser")
-		# print(page)
-		if page.find('krpano'):
-			return source
-		link = page.find('link', {'rel':'video_src'})
-		print("link: ", link)
-		# query = urlparse(link['href']).query
-		query = urlparse("http://example.com/javascripts/krpano/krpano.swf?pano=http://www.360cities.net/embed_iframe/downtown-los-angeles-night-view.xml&state=facebook").query
-		print("query: ", query)
-		params = dict([p.split('=') for p in query.split('&')])
-		print("returning: ", params['pano'])
-		return params['pano']
+		imagename = url.split("/")[-1]
+		# print(f"http://www.360cities.net/embed_iframe/{imagename}.xml")
+		thing = urlparse(f"http://www.360cities.net/embed_iframe/{imagename}.xml").geturl()
+		# print("returning query: ", thing)
+		return thing
 	except Exception as e:
-		print(e)
+		# print(e)
 		return None
 
 class NotFound(Exception):
@@ -96,8 +87,8 @@ def tiles(url, target=None, size=[], **kwargs):
 	''' yields pairs (url, filename) of tiles to download '''
 	# one dir per pano
 	if not target:
-		# target = basename(urlparse(url).path)
-		target = "folder"
+		target = basename(urlparse(url).path)
+		# target = "folder"
 		# target = ""
 	try_makedirs(target)
 
@@ -109,34 +100,30 @@ def tiles(url, target=None, size=[], **kwargs):
 	# info_file = join(target, 'info.xml')
 	info_file = "info.xml"
 	if not exists(info_file):
-		print("info file doesn't exist")
-		print('Retrieving info...')
+		# print("info file doesn't exist")
+		# print('Retrieving info...')
 		info = get_info(url)
-		print("info returned")
+		# print("info returned", info)
 		if not info:
-			print('LINE 113 - NOT FOUND')
 			raise NotFound()
 		elif type(info) == str:
-			print("info is string")
+			# print("info is string")
 			info_url = urljoin(url, info)
-			print("info_url: ", info_url)
+			# print("info_url: ", info_url)
 			if not info_url:
-				print('LINE 119 - NOT FOUND')
 				raise NotFound()
 			msg = urlopen(info_url)
 			msgcont = msg.read().decode("utf-8")
 			# print("msg: ", msgcont)
-			print("code: ", msg.getcode())
+			# print("code: ", msg.getcode())
 			if msg.getcode() not in [200]:
-				print('LINE 123 - NOT FOUND')
 				raise NotFound()
 		else:
-			print("info is not string")
 			msg = info
 		with open("info.xml", 'w') as f:
 			# print(target)
 			# print(join(target, 'info.xml'))	
-			print("writing to file")
+			# print("writing to file")
 			for line in msgcont:
 				f.write(line)
 				
@@ -157,12 +144,12 @@ def tiles(url, target=None, size=[], **kwargs):
 	# go through levels
 	count = 0
 	for level in filter_levels(image.findAll('level'), size):
-		print(repr(level))
+		# print(repr(level))
 		width = int(level['tiledimagewidth'])
 		height = int(level['tiledimageheight'])
-		print("width: ", width)
-		print("height: ", height)
-		print("tilesize: ", tilesize)
+		# print("width: ", width)
+		# print("height: ", height)
+		# print("tilesize: ", tilesize)
 		row_count = width / tilesize
 		col_count = height / tilesize
 
@@ -182,8 +169,8 @@ def tiles(url, target=None, size=[], **kwargs):
 		elif image_type == 'cube':
 			for side in ['left', 'right', 'front', 'back', 'up', 'down']:
 				pat = level.find(side)['url']
-				print("base_idx: ", base_idx)
-				print("row_count: ", row_count)
+				# print("base_idx: ", base_idx)
+				# print("row_count: ", row_count)
 				for row in range(base_idx, math.ceil(row_count) + base_idx):
 					for col in range(base_idx, math.ceil(col_count) + base_idx):
 						tile_name = join(tile_path, '%s-%d-%d.jpg' % (side, row, col))
